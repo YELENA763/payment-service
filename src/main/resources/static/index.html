@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="az">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Payment Service</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a2332;
+      --border: #2d3a4d;
+      --text: #e7ecf3;
+      --muted: #8b9bb4;
+      --accent: #3d9cf0;
+      --accent-hover: #2b8ae0;
+      --ok: #3ecf8e;
+      --err: #f07178;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 2rem 1rem;
+    }
+    .wrap { max-width: 640px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }
+    p.sub { color: var(--muted); margin: 0 0 1.5rem; font-size: 0.9rem; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+    }
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.35rem; }
+    input {
+      width: 100%;
+      padding: 0.65rem 0.75rem;
+      margin-bottom: 0.9rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 1rem;
+    }
+    input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    .row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    button {
+      padding: 0.65rem 1.1rem;
+      border: none;
+      border-radius: 6px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+    button:hover { background: var(--accent-hover); }
+    button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    button.secondary:hover { border-color: var(--accent); color: var(--accent); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    #status { min-height: 1.25rem; font-size: 0.85rem; margin-top: 0.75rem; }
+    #status.ok { color: var(--ok); }
+    #status.err { color: var(--err); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { text-align: left; padding: 0.55rem 0.4rem; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 500; }
+    .empty { color: var(--muted); font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Payment Service</h1>
+    <p class="sub">API: <code>/api/v1/transactions</code></p>
+
+    <div class="panel">
+      <form id="createForm">
+        <label for="name">Ad</label>
+        <input id="name" name="name" required placeholder="məs. Ali" autocomplete="off" />
+
+        <label for="amount">Məbləğ</label>
+        <input id="amount" name="amount" type="number" step="0.01" min="0" required placeholder="məs. 100" />
+
+        <div class="row">
+          <button type="submit">Ödəniş yarat</button>
+          <button type="button" class="secondary" id="refreshBtn">Siyahını yenilə</button>
+        </div>
+        <div id="status"></div>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2 style="margin: 0 0 0.75rem; font-size: 1.1rem;">Tranzaksiyalar</h2>
+      <div id="list"><p class="empty">Yüklənir...</p></div>
+    </div>
+  </div>
+
+  <script>
+    const API = "/api/v1/transactions";
+    const statusEl = document.getElementById("status");
+    const listEl = document.getElementById("list");
+
+    function setStatus(msg, type) {
+      statusEl.textContent = msg || "";
+      statusEl.className = type || "";
+    }
+
+    async function loadTransactions() {
+      try {
+        const res = await fetch(API);
+        if (!res.ok) throw new Error("GET " + res.status);
+        const data = await res.json();
+        if (!data.length) {
+          listEl.innerHTML = '<p class="empty">Hələ tranzaksiya yoxdur.</p>';
+          return;
+        }
+        listEl.innerHTML =
+          "<table><thead><tr><th>ID</th><th>Ad</th><th>Məbləğ</th><th>Tarix</th></tr></thead><tbody>" +
+          data
+            .map(
+              (t) =>
+                "<tr><td>" +
+                t.id +
+                "</td><td>" +
+                escapeHtml(t.name) +
+                "</td><td>" +
+                t.amount +
+                "</td><td>" +
+                (t.date || "") +
+                "</td></tr>"
+            )
+            .join("") +
+          "</tbody></table>";
+      } catch (e) {
+        listEl.innerHTML = '<p class="empty">Xəta: API-yə qoşulmaq mümkün olmadı.</p>';
+        setStatus(String(e.message || e), "err");
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    document.getElementById("createForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = document.getElementById("name").value.trim();
+      const amount = Number(document.getElementById("amount").value);
+      const btn = e.target.querySelector('button[type="submit"]');
+      btn.disabled = true;
+      setStatus("Göndərilir...", "");
+      try {
+        const res = await fetch(API, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, amount }),
+        });
+        if (!res.ok) throw new Error("POST " + res.status);
+        const created = await res.json();
+        setStatus("Yaradıldı: #" + created.id + " — " + created.name, "ok");
+        e.target.reset();
+        await loadTransactions();
+      } catch (err) {
+        setStatus("Xəta: " + (err.message || err), "err");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById("refreshBtn").addEventListener("click", () => {
+      setStatus("");
+      loadTransactions();
+    });
+
+    loadTransactions();
+  </script>
+</body>
+</html>
